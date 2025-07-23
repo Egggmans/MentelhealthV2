@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>🧠 Unpacked: Life Turning Points</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0f172a;
+      color: #f1f5f9;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 960px;
+      margin: 40px auto;
+      background: #1e293b;
+      padding: 30px;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      text-align: center;
+    }
+    textarea {
+      width: 100%;
+      height: 150px;
+      font-size: 16px;
+      padding: 12px;
+      background: #0f172a;
+      color: #f1f5f9;
+      border: 1px solid #475569;
+      border-radius: 8px;
+      resize: vertical;
+    }
+    button {
+      background-color: #4f46e5;
+      color: white;
+      font-size: 16px;
+      padding: 12px 24px;
+      margin-top: 16px;
+      margin-right: 8px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #4338ca;
+    }
+    #graph {
+      height: 500px;
+      margin-top: 30px;
+      border: 1px solid #64748b;
+      border-radius: 12px;
+      background-color: #0f172a;
+    }
+    #analysis {
+      margin-top: 30px;
+      background: #1e293b;
+      padding: 20px;
+      border-left: 4px solid #4f46e5;
+      border-radius: 8px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧠 Unpacked: Life Turning Points Analyzer</h1>
+    <textarea id="story" placeholder="Paste your life story here... Focus on key decisions, losses, struggles, breakthroughs..."></textarea>
+    <div>
+      <button onclick="generateMap()">Generate Map</button>
+    </div>
+    <div id="graph"></div>
+    <div id="analysis"></div>
+  </div>
+
+  <script>
+    let network;
+
+    function isTurningPoint(sentence) {
+      const keywords = [
+        "break up", "broke up", "divorce", "fired", "quit", "moved",
+        "lost", "rejected", "failed", "accident", "died", "diagnosed",
+        "abuse", "betrayed", "homeless", "overdose", "relapse", "burned out"
+      ];
+      return keywords.some(kw => sentence.toLowerCase().includes(kw));
+    }
+
+    async function guessEmotionsBatch(sentences) {
+      const response = await fetch("https://api-inference.huggingface.co/models/mrm8488/t5-base-finetuned-emotion", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer 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",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ inputs: sentences })
+      });
+      return await response.json();
+    }
+
+    function getColorByEmotion(emotion) {
+      const colors = {
+        joy: '#eab308',
+        sadness: '#6366f1',
+        anger: '#ef4444',
+        fear: '#0ea5e9',
+        love: '#3b82f6',
+        surprise: '#a855f7',
+        reflective: '#475569'
+      };
+      return { background: colors[emotion] || '#334155' };
+    }
+
+    async function analyzeStory(text) {
+      const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+      const turningPoints = sentences.filter(isTurningPoint).slice(0, 8); // Limit for speed
+      const responses = await guessEmotionsBatch(turningPoints);
+
+      return turningPoints.map((s, i) => {
+        const label = responses[i]?.[0]?.label?.toLowerCase() || "reflective";
+        return {
+          id: i + 1,
+          label: `• ${s.trim()}`,
+          title: `Emotion: ${label}`,
+          color: getColorByEmotion(label),
+          emotion: label
+        };
+      });
+    }
+
+    function estimateProbability(events) {
+      const growth = events.filter(e => ["hope", "joy", "reflective"].includes(e.emotion)).length;
+      const risky = events.some(e => e.label.toLowerCase().includes("quit") || e.label.toLowerCase().includes("moved"));
+      return Math.min(95, 40 + growth * 6 + (risky ? 15 : 0));
+    }
+
+    function generateAdvice(events) {
+      const counts = {};
+      for (let e of events) counts[e.emotion] = (counts[e.emotion] || 0) + 1;
+      const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+      let advice = "", warning = "";
+
+      switch (dominant) {
+        case "sadness":
+          advice = "Start rebuilding joy through creativity and social support.";
+          warning = "Lingering grief may be silently shaping your worldview.";
+          break;
+        case "anger":
+          advice = "Transform frustration into art, writing, or helping others.";
+          warning = "Unchecked anger might push people away before they can help.";
+          break;
+        case "fear":
+          advice = "Face discomforts in small, regular steps to build confidence.";
+          warning = "Fear-driven decisions may be limiting your potential.";
+          break;
+        case "reflective":
+          advice = "You’ve gained insights — now choose one thing to act on.";
+          warning = "Reflection without forward action can become emotional stagnation.";
+          break;
+        case "joy":
+          advice = "Protect your happiness by maintaining boundaries.";
+          warning = "Make sure joy isn’t a mask for deeper unprocessed emotions.";
+          break;
+        default:
+          advice = "Keep listening to yourself. You’re evolving.";
+          warning = "Avoid staying too long in uncertainty — make a small bold step.";
+      }
+
+      return { advice, warning };
+    }
+
+    async function generateMap() {
+      const text = document.getElementById('story').value;
+      const events = await analyzeStory(text);
+
+      const nodes = new vis.DataSet(events);
+      const edges = new vis.DataSet(events.slice(1).map((e, i) => ({
+        from: events[i].id,
+        to: e.id
+      })));
+
+      const container = document.getElementById('graph');
+      const data = { nodes, edges };
+
+      const options = {
+        layout: {
+          hierarchical: {
+            direction: "UD",
+            nodeSpacing: 180,
+            levelSeparation: 100
+          }
+        },
+        nodes: {
+          shape: 'box',
+          font: { size: 16, face: 'Inter', color: '#f1f5f9' },
+          borderWidth: 1,
+          margin: 10
+        },
+        edges: {
+          arrows: { to: { enabled: true } },
+          color: '#94a3b8',
+          smooth: true
+        },
+        physics: false
+      };
+
+      network = new vis.Network(container, data, options);
+
+      const prob = estimateProbability(events);
+      const { advice, warning } = generateAdvice(events);
+
+      document.getElementById('analysis').innerHTML = `
+        <h3>📊 Life Turning Point Analysis</h3>
+        <p><strong>Detected major events:</strong> ${events.length}</p>
+        <p><strong>Estimated probability of reaching current state:</strong> ${prob}%</p>
+        <p><strong>Advice:</strong> ${advice}</p>
+        <p><strong>What might be holding you back:</strong> ${warning}</p>
+      `;
+    }
+  </script>
+</body>
+</html>
